@@ -1,5 +1,5 @@
 // ITU-T H.222.0(06/2012)
-// Information technology ¨C Generic coding of moving pictures and associated audio information: Systems
+// Information technology - Generic coding of moving pictures and associated audio information: Systems
 // 2.5.3.1 Program stream(p74)
 
 #include <stdio.h>
@@ -8,6 +8,7 @@
 #include "mpeg-ps-proto.h"
 #include "mpeg-ts-proto.h"
 #include "mpeg-pes-proto.h"
+#include "mpeg-util.h"
 #include <assert.h>
 #include <string.h>
 
@@ -19,17 +20,69 @@ struct ps_demuxer_t
     struct ps_pack_header_t pkhd;
     struct ps_system_header_t system;
 
+    int start;
+    int h26x_verify;
+
     ps_demuxer_onpacket onpacket;
-	void* param;	
+	void* param;
+
+    struct ps_demuxer_notify_t notify;
+    void* notify_param;
 };
+
+static void ps_demuxer_notify(struct ps_demuxer_t* ps);
+
+static size_t ps_demuxer_find_startcode(const uint8_t* data, size_t bytes)
+{
+    const uint8_t* p, * pend;
+    pend = data + bytes;
+    p = data;
+
+    // find ps start
+    for (p = data; data && p + 2 < pend; p++)
+    {
+        if (0x00 != p[0])
+            continue;
+
+        if (0x00 != p[1])
+        {
+            p++;
+            continue;
+        }
+
+        if (0x01 == p[2])
+            break;
+        else if (0x00 != p[2])
+            p += 2;
+    }
+
+    return p - data;
+}
+
+#if defined(MPEG_ZERO_PAYLOAD_LENGTH)
+static size_t ps_demuxer_find_pes_start(const uint8_t* data, size_t bytes)
+{
+    size_t i;
+    const uint8_t* p, * end;
+    
+    end = data + bytes;
+    for (p = data; p + 6 < end; p += i + 4)
+    {
+        i = ps_demuxer_find_startcode(p, end - p);
+        if (PES_SID_START == p[i + 3])
+            return i + (p - data);
+    }
+
+    return bytes; // not found
+}
+#endif
 
 static int ps_demuxer_onpes(void* param, int program, int stream, int codecid, int flags, int64_t pts, int64_t dts, const void* data, size_t bytes)
 {
     struct ps_demuxer_t* ps;
     ps = (struct ps_demuxer_t*)param;
     assert(0 == program); // unused(ts demux only)
-    ps->onpacket(ps->param, stream, codecid, flags, pts, dts, data, bytes);
-    return 0;
+    return ps->onpacket(ps->param, stream, codecid, flags, pts, dts, data, bytes);
 }
 
 static struct pes_t* psm_fetch(struct psm_t* psm, uint8_t sid)
@@ -53,10 +106,14 @@ static struct pes_t* psm_fetch(struct psm_t* psm, uint8_t sid)
 		// Rec. ITU-T H.265 | ISO/IEC 23008-2 video stream number 'xxxx'
 
         // guess stream codec id
+#if defined(MPEG_GUESS_STREAM) || defined(MPEG_H26X_VERIFY)
         if (0xE0 <= sid && sid <= 0xEF)
             psm->streams[psm->stream_count].codecid = PSI_STREAM_H264;
-        else if(0xC0 <= sid && sid <= 0xDF)
+#endif
+#if defined(MPEG_GUESS_STREAM)
+        if(0xC0 <= sid && sid <= 0xDF)
             psm->streams[psm->stream_count].codecid = PSI_STREAM_AAC;
+#endif
 
         return &psm->streams[psm->stream_count++];
     }
@@ -64,34 +121,48 @@ static struct pes_t* psm_fetch(struct psm_t* psm, uint8_t sid)
     return NULL;
 }
 
-static size_t pes_packet_read(struct ps_demuxer_t *ps, const uint8_t* data, size_t bytes)
+static int pes_packet_read(struct ps_demuxer_t *ps, const uint8_t* data, size_t bytes)
 {
+    int r;
+    size_t n;
     size_t i = 0;
     size_t j = 0;
     size_t pes_packet_length;
     struct pes_t* pes;
 
-    // MPEG_program_end_code = 0x000000B9
+    // MPEG_program_end_code = 0x000001B9
     for (i = 0; i + 5 < bytes && 0x00 == data[i] && 0x00 == data[i + 1] && 0x01 == data[i + 2]
         && PES_SID_END != data[i + 3]
         && PES_SID_START != data[i + 3];
         i += pes_packet_length + 6) 
     {
         pes_packet_length = (data[i + 4] << 8) | data[i + 5];
-        assert(i + 6 + pes_packet_length <= bytes);
+#if defined(MPEG_ZERO_PAYLOAD_LENGTH)
+        // fix H.264/H.265 ps payload zero-length
+        if (0 == pes_packet_length && 0xE0 <= data[i + 3] && data[i + 3] <= 0xEF)
+        {
+            pes_packet_length = ps_demuxer_find_pes_start(data + i + 6, bytes - i - 6);
+        }
+#endif
+
+        //assert(i + 6 + pes_packet_length <= bytes);
         if (i + 6 + pes_packet_length > bytes)
-            return 0;
+            return (int)i; // need more data
 
         // stream id
         switch (data[i+3])
         {
         case PES_SID_PSM:
-            j = psm_read(&ps->psm, data + i, bytes - i);
+            n = ps->psm.stream_count;
+            j = psm_read(&ps->psm, data + i, pes_packet_length + 6);
             assert(j == pes_packet_length + 6);
+            if (n != ps->psm.stream_count)
+                ps_demuxer_notify(ps); // TODO: check psm stream sid
+            ps->h26x_verify = 1;
             break;
 
         case PES_SID_PSD:
-            j = psd_read(&ps->psd, data + i, bytes - i);
+            j = psd_read(&ps->psd, data + i, pes_packet_length + 6);
             assert(j == pes_packet_length + 6);
             break;
 
@@ -123,48 +194,92 @@ static size_t pes_packet_read(struct ps_demuxer_t *ps, const uint8_t* data, size
 
             assert(PES_SID_END != data[i + 3]);
 			if (ps->pkhd.mpeg2)
-				j = pes_read_header(pes, data + i, bytes - i);
+				j = pes_read_header(pes, data + i, pes_packet_length + 6);
 			else
-				j = pes_read_mpeg1_header(pes, data + i, bytes - i);
+				j = pes_read_mpeg1_header(pes, data + i, pes_packet_length + 6);
 
-			if (0 == j) continue;
+            if (j > 0)
+            {
+#if defined(MPEG_H26X_VERIFY)
+                if (ps->h26x_verify && (PSI_STREAM_H264 == pes->codecid || PSI_STREAM_H265 == pes->codecid) && 0 == mpeg_h26x_verify(data + i + j, pes_packet_length + 6 - j, &r))
+                {
+                    // maybe modify codecid
+                    pes->codecid = (1 == r ? PSI_STREAM_H264 : PSI_STREAM_H265);
+                    ps->h26x_verify = 0;
+                }
+#endif
 
-            pes_packet(&pes->pkt, pes, data + i + j, pes_packet_length + 6 - j, ps_demuxer_onpes, ps);
+#if defined(MPEG_DAHUA_AAC_FROM_G711)
+                if ((pes->codecid == PSI_STREAM_AUDIO_G711A || pes->codecid == PSI_STREAM_AUDIO_G711U)
+                    && pes_packet_length + 6 - j > 7 && 0xFF == data[i + j] && 0xF0 == (data[i + j + 1] & 0xF0))
+                {
+                    // calc mpeg4_aac_adts_frame_length
+                    for (r = i + j; (size_t)r + 7 < pes_packet_length + 6 - j;)
+                        r += ((uint16_t)(data[r+3] & 0x03) << 11) | ((uint16_t)data[r + 4] << 3) | ((uint16_t)(data[r + 5] >> 5) & 0x07);
+                    pes->codecid = (size_t)r == pes_packet_length + 6 - j ? PSI_STREAM_AAC : pes->codecid; // fix it
+                }
+#endif
+                r = pes_packet(&pes->pkt, pes, data + i + j, pes_packet_length + 6 - j, ps->start, ps_demuxer_onpes, ps);
+                ps->start = 0; // clear start flag
+                if (0 != r)
+                    return r;
+            }
+
+            break;
         }
+
+        if (0 == j)
+            return (int)(i + 4); // invalid data, skip start code
     }
 
-    return i;
+    return (int)i;
 }
 
-size_t ps_demuxer_input(struct ps_demuxer_t* ps, const uint8_t* data, size_t bytes)
+int ps_demuxer_input(struct ps_demuxer_t* ps, const uint8_t* data, size_t bytes)
 {
-	size_t i, n;
-	
-    for (i = 0; i + 3 < bytes && 0x00 == data[i] && 0x00 == data[i + 1] && 0x01 == data[i + 2]; )
+    int n;
+	size_t i;
+    
+    for (i = ps_demuxer_find_startcode(data, bytes); data && i + 3 < bytes; i += ps_demuxer_find_startcode(data + i, bytes - i))
     {
-        if (PES_SID_START == data[i + 3])
-        {
-            i += pack_header_read(&ps->pkhd, data + i, bytes - i);
-        }
-        else if (PES_SID_SYS == data[i + 3])
-        {
-            i += system_header_read(&ps->system, data + i, bytes - i);
-        }
-        else if (PES_SID_END == data[i + 3])
+        // fix HIK H.265: 00 00 01 BA 00 00 01 E0 ...
+        if (i + 6 < bytes && 00 == data[i + 4] && 00 == data[i + 5] && 01 == data[i + 6])
         {
             i += 4;
+            continue;
         }
-        else
-        {
-            n = pes_packet_read(ps, data + i, bytes - i);
-            i += n;
 
-            if (0 == n)
-                break;
+        switch (data[i + 3])
+        {
+        case PES_SID_START:
+            ps->start = 1;
+            n = (int)pack_header_read(&ps->pkhd, data + i, bytes - i);
+            break;
+            
+        case PES_SID_SYS:
+            n = (int)system_header_read(&ps->system, data + i, bytes - i);
+            break;
+            
+        case PES_SID_END:
+            n = 4;
+            break;
+                
+        default:
+            n = pes_packet_read(ps, data + i, bytes - i);
+            break;
         }
+
+        if (n < 0)
+            return n;
+
+        assert(i + n <= bytes);
+        if (0 == n || i + n > bytes)
+            break;
+        
+        i += n;
     }
 
-	return i;
+	return (int)i;
 }
 
 struct ps_demuxer_t* ps_demuxer_create(ps_demuxer_onpacket onpacket, void* param)
@@ -174,6 +289,7 @@ struct ps_demuxer_t* ps_demuxer_create(ps_demuxer_onpacket onpacket, void* param
 	if(!ps)
 		return NULL;
 
+    ps->h26x_verify = 1;
 	ps->pkhd.mpeg2 = 1;
     ps->onpacket = onpacket;
 	ps->param = param;
@@ -194,4 +310,24 @@ int ps_demuxer_destroy(struct ps_demuxer_t* ps)
 
 	free(ps);
 	return 0;
+}
+
+void ps_demuxer_set_notify(struct ps_demuxer_t* ps, struct ps_demuxer_notify_t *notify, void* param)
+{
+    ps->notify_param = param;
+    memcpy(&ps->notify, notify, sizeof(ps->notify));
+}
+
+static void ps_demuxer_notify(struct ps_demuxer_t* ps)
+{
+    size_t i;
+    struct pes_t* pes;
+    if (!ps->notify.onstream)
+        return;
+
+    for (i = 0; i < ps->psm.stream_count; i++)
+    {
+        pes = &ps->psm.streams[i];
+        ps->notify.onstream(ps->notify_param, pes->pid, pes->codecid, pes->esinfo, pes->esinfo_len, i + 1 >= ps->psm.stream_count ? 1 : 0);
+    }
 }

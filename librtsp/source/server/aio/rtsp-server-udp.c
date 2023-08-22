@@ -46,7 +46,7 @@ void* rtsp_transport_udp_create(const char* ip, int port, struct rtsp_handler_t*
 		memcpy(&t->handler, handler, sizeof(t->handler));
 		handler->send = rtsp_transport_udp_send;
 
-		t->socket = socket_udp_bind(ip, (u_short)port);
+		t->socket = socket_udp_bind(0 /*AF_UNSPEC*/, ip, (u_short)port, 0, 1);
 		if (socket_invalid == t->socket)
 		{
 			free(t);
@@ -133,7 +133,7 @@ static void rtsp_transport_udp_recv(struct rtsp_udp_transport_t* t)
 static void rtsp_transport_udp_onrecv(void* param, int code, size_t bytes, const struct sockaddr* addr, socklen_t addrlen)
 {
 	char ip[65];
-	unsigned short port;
+	unsigned short port = 0;
 	struct rtsp_udp_session_t* session;
 	struct rtsp_udp_transport_t* transport;
 	session = (struct rtsp_udp_session_t*)param;

@@ -20,7 +20,7 @@ static inline void be_write_uint32(uint8_t* ptr, uint32_t val)
 	ptr[3] = (uint8_t)(val & 0xFF);
 }
 
-int flv_header_read(struct flv_header_t* flv, const uint8_t* buf, int len)
+int flv_header_read(struct flv_header_t* flv, const uint8_t* buf, size_t len)
 {
 	if (len < FLV_HEADER_SIZE || 'F' != buf[0] || 'L' != buf[1] || 'V' != buf[2])
 	{
@@ -34,14 +34,14 @@ int flv_header_read(struct flv_header_t* flv, const uint8_t* buf, int len)
 	flv->version = buf[3];
 
 	assert(0x00 == (buf[4] & 0xF8) && 0x00 == (buf[4] & 0x20));
-	flv->audio = (buf[4] >> 3) & 0x01;
+	flv->audio = (buf[4] >> 2) & 0x01;
 	flv->video = buf[4] & 0x01;
 	flv->offset = be_read_uint32(buf + 5);
 
 	return FLV_HEADER_SIZE;
 }
 
-int flv_tag_header_read(struct flv_tag_header_t* tag, const uint8_t* buf, int len)
+int flv_tag_header_read(struct flv_tag_header_t* tag, const uint8_t* buf, size_t len)
 {
 	if (len < FLV_TAG_HEADER_SIZE)
 	{
@@ -67,7 +67,7 @@ int flv_tag_header_read(struct flv_tag_header_t* tag, const uint8_t* buf, int le
 	return FLV_TAG_HEADER_SIZE;
 }
 
-int flv_audio_tag_header_read(struct flv_audio_tag_header_t* audio, const uint8_t* buf, int len)
+int flv_audio_tag_header_read(struct flv_audio_tag_header_t* audio, const uint8_t* buf, size_t len)
 {
 	assert(len > 0);
 	audio->codecid = (buf[0] & 0xF0) /*>> 4*/;
@@ -75,7 +75,7 @@ int flv_audio_tag_header_read(struct flv_audio_tag_header_t* audio, const uint8_
 	audio->bits = (buf[0] & 0x02) >> 1;
 	audio->channels = buf[0] & 0x01;
 
-	if (FLV_AUDIO_AAC == audio->codecid)
+	if (FLV_AUDIO_AAC == audio->codecid || FLV_AUDIO_OPUS == audio->codecid)
 	{
 		if (len < 2)
 		{
@@ -92,7 +92,7 @@ int flv_audio_tag_header_read(struct flv_audio_tag_header_t* audio, const uint8_
 	}
 }
 
-int flv_video_tag_header_read(struct flv_video_tag_header_t* video, const uint8_t* buf, int len)
+int flv_video_tag_header_read(struct flv_video_tag_header_t* video, const uint8_t* buf, size_t len)
 {
 	assert(len > 0);
 	video->keyframe = (buf[0] & 0xF0) >> 4;
@@ -116,13 +116,13 @@ int flv_video_tag_header_read(struct flv_video_tag_header_t* video, const uint8_
 	}
 }
 
-int flv_data_tag_header_read(const uint8_t* buf, int len)
+int flv_data_tag_header_read(const uint8_t* buf, size_t len)
 {
-	buf;
-	return len;
+	(void)buf;
+	return (int)len;
 }
 
-int flv_header_write(int audio, int video, uint8_t* buf, int len)
+int flv_header_write(int audio, int video, uint8_t* buf, size_t len)
 {
 	if (len < FLV_HEADER_SIZE)
 	{
@@ -139,7 +139,7 @@ int flv_header_write(int audio, int video, uint8_t* buf, int len)
 	return FLV_HEADER_SIZE;
 }
 
-int flv_tag_header_write(const struct flv_tag_header_t* tag, uint8_t* buf, int len)
+int flv_tag_header_write(const struct flv_tag_header_t* tag, uint8_t* buf, size_t len)
 {
 	if (len < FLV_TAG_HEADER_SIZE)
 	{
@@ -170,26 +170,26 @@ int flv_tag_header_write(const struct flv_tag_header_t* tag, uint8_t* buf, int l
 	return FLV_TAG_HEADER_SIZE;
 }
 
-int flv_audio_tag_header_write(const struct flv_audio_tag_header_t* audio, uint8_t* buf, int len)
+int flv_audio_tag_header_write(const struct flv_audio_tag_header_t* audio, uint8_t* buf, size_t len)
 {
-	if (len < 1 + (FLV_AUDIO_AAC == audio->codecid ? 1 : 0))
+	if ((int)len < 1 + ((FLV_AUDIO_AAC == audio->codecid || FLV_AUDIO_OPUS == audio->codecid)? 1 : 0))
 		return -1;
 
-	if (FLV_AUDIO_AAC == audio->codecid)
+	if (FLV_AUDIO_AAC == audio->codecid || FLV_AUDIO_OPUS == audio->codecid)
 	{
 		assert(FLV_SEQUENCE_HEADER == audio->avpacket || FLV_AVPACKET == audio->avpacket);
-		buf[0] = (FLV_AUDIO_AAC /*<< 4*/) /* SoundFormat */ | (3 << 2) /* 44k-SoundRate */ | (1 << 1) /* 16-bit samples */ | 1 /* Stereo sound */;
+		buf[0] = (audio->codecid /* <<4 */) /* SoundFormat */ | (3 << 2) /* 44k-SoundRate */ | (1 << 1) /* 16-bit samples */ | 1 /* Stereo sound */;
 		buf[1] = audio->avpacket; // AACPacketType
 		return 2;
 	}
 	else
 	{
-		buf[0] = (audio->codecid /*<< 4*/) | ((audio->rate && 0x03) << 2) | ((audio->bits & 0x01) << 1) | (audio->channels & 0x01);
+		buf[0] = (audio->codecid /* <<4 */) | ((audio->rate & 0x03) << 2) | ((audio->bits & 0x01) << 1) | (audio->channels & 0x01);
 		return 1;
 	}
 }
 
-int flv_video_tag_header_write(const struct flv_video_tag_header_t* video, uint8_t* buf, int len)
+int flv_video_tag_header_write(const struct flv_video_tag_header_t* video, uint8_t* buf, size_t len)
 {
 	if (len < 1)
 		return -1;
@@ -212,8 +212,25 @@ int flv_video_tag_header_write(const struct flv_video_tag_header_t* video, uint8
 	return 1;
 }
 
-int flv_data_tag_header_write(uint8_t* buf, int len)
+int flv_data_tag_header_write(uint8_t* buf, size_t len)
 {
-	buf, len;
+    (void)buf;
+    (void)len;
 	return 0;
+}
+
+int flv_tag_size_read(const uint8_t* buf, size_t len, uint32_t* size)
+{
+    if(len < 4)
+        return -1;
+    *size = be_read_uint32(buf);
+    return 4;
+}
+
+int flv_tag_size_write(uint8_t* buf, size_t len, uint32_t size)
+{
+    if(len < 4)
+        return -1;
+    be_write_uint32(buf, size);
+    return 4;
 }

@@ -20,6 +20,7 @@ struct rtsp_client_t* rtsp_client_create(const char* uri, const char* usr, const
 	rtsp->parser = http_parser_create(HTTP_PARSER_RESPONSE, NULL, NULL);
 	memcpy(&rtsp->handler, handler, sizeof(rtsp->handler));
 	rtsp->rtp.onrtp = rtsp->handler.onrtp;
+	rtsp->rtp.onrtp_svr = NULL; // muhwan add
 	rtsp->rtp.param = param;
 	rtsp->state = RTSP_INIT;
 	rtsp->param = param;
@@ -61,6 +62,8 @@ static int rtsp_client_handle(struct rtsp_client_t* rtsp, http_parser_t* parser)
 	case RTSP_OPTIONS:	return rtsp_client_options_onreply(rtsp, parser);
 	case RTSP_GET_PARAMETER: return rtsp_client_get_parameter_onreply(rtsp, parser);
 	case RTSP_SET_PARAMETER: return rtsp_client_set_parameter_onreply(rtsp, parser);
+	// muhwan: RTSP_RECORD Ãß°¡
+	case RTSP_RECORD:	return rtsp_client_record_onreply(rtsp, parser);	
 	default: assert(0); return -1;
 	}
 }
@@ -79,10 +82,14 @@ int rtsp_client_input(struct rtsp_client_t *rtsp, const void* data, size_t bytes
 	{
 		if (0 == rtsp->parser_need_more_data && (*p == '$' || 0 != rtsp->rtp.state))
 		{
-			p = rtp_over_rtsp(&rtsp->rtp, p, end);
+			// muhwan modify 
+			//p = rtp_over_rtsp(&rtsp->rtp, p, end);
+			p = rtp_over_rtsp(&rtsp->rtp, p, end, NULL);
 		}
 		else
 		{
+			// TODO: server->client Announce (update sdp)
+
 			remain = (size_t)(end - p);
 			r = http_parser_input(rtsp->parser, p, &remain);
 			rtsp->parser_need_more_data = r;
@@ -97,7 +104,7 @@ int rtsp_client_input(struct rtsp_client_t *rtsp, const void* data, size_t bytes
 		}
 	} while (p < end && r >= 0);
 
-	assert(r <= 1);
+	assert(r <= 2);
 	return r >= 0 ? 0 : r;
 }
 
@@ -116,6 +123,13 @@ const struct rtsp_header_transport_t* rtsp_client_get_media_transport(struct rts
 	if(media < 0 || media >= rtsp->media_count)
 		return NULL;
 	return rtsp->transport + media;
+}
+
+const struct rtsp_media_t* rtsp_client_get_media(struct rtsp_client_t* rtsp, int media)
+{
+	if (media < 0 || media >= rtsp->media_count)
+		return NULL;
+	return rtsp->media + media;
 }
 
 const char* rtsp_client_get_media_encoding(struct rtsp_client_t *rtsp, int media)

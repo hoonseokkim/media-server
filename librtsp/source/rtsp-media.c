@@ -1,5 +1,6 @@
 #include "rtsp-media.h"
 #include "sdp.h"
+#include "sdp-options.h"
 #include "sdp-a-fmtp.h"
 #include "sdp-a-rtpmap.h"
 #include <stdio.h>
@@ -19,30 +20,30 @@ static inline int scopy(struct rtsp_media_t* medias, char** dst, const char* src
 	return 0;
 }
 
-static inline int vscopy(struct rtsp_media_t* medias, char** dst, const char* fmt, ...)
-{
-	int n;
-	va_list args;
-	va_start(args, fmt);
-	n = vsnprintf(medias->ptr + medias->offset, sizeof(medias->ptr) - medias->offset, fmt, args);
-	va_end(args);
-
-	if (n < 0 || n >= (int)sizeof(medias->ptr) - medias->offset)
-		return -1;
-	*dst = medias->ptr + medias->offset;
-	medias->offset += n + 1; // with '\0'
-	return 0;
-}
-
-static inline int rtsp_media_aggregate_control_enable(void *sdp)
-{
-	const char* control;
-
-	// rfc 2326 C.1.1 Control URL (p80)
-	// If found at the session level, the attribute indicates the URL for aggregate control
-	control = sdp_attribute_find(sdp, "control");
-	return (control && *control) ? 1 : 0;
-}
+//static inline int vscopy(struct rtsp_media_t* medias, char** dst, const char* fmt, ...)
+//{
+//	int n;
+//	va_list args;
+//	va_start(args, fmt);
+//	n = vsnprintf(medias->ptr + medias->offset, sizeof(medias->ptr) - medias->offset, fmt, args);
+//	va_end(args);
+//
+//	if (n < 0 || n >= (int)sizeof(medias->ptr) - medias->offset)
+//		return -1;
+//	*dst = medias->ptr + medias->offset;
+//	medias->offset += n + 1; // with '\0'
+//	return 0;
+//}
+//
+//static inline int rtsp_media_aggregate_control_enable(void *sdp)
+//{
+//	const char* control;
+//
+//	// rfc 2326 C.1.1 Control URL (p80)
+//	// If found at the session level, the attribute indicates the URL for aggregate control
+//	control = sdp_attribute_find(sdp, "control");
+//	return (control && *control) ? 1 : 0;
+//}
 
 static int isAbsoluteURL(char const* url)
 {
@@ -72,6 +73,8 @@ static const char* uri_join(char* uri, size_t bytes, const char* base, const cha
 		path += 1;
 	if ('/' == uri[offset - 1] || '\\' == uri[offset - 1])
 		offset -= 1;
+
+	// TODO: check uri parameters '?'
 	offset += snprintf(uri + offset, bytes - offset, "/%s", path);
 	return uri;
 }
@@ -180,7 +183,7 @@ static void rtsp_media_onattr(void* param, const char* name, const char* value)
 		}
 		else if (0 == strcmp("fmtp", name))
 		{
-			n = strlen(value);
+			n = (int)strlen(value);
 			payload = atoi(value);
 			for (i = 0; i < media->avformat_count && media->offset + n + 1 < sizeof(media->ptr); i++)
 			{
@@ -291,13 +294,26 @@ static void rtsp_media_onattr(void* param, const char* name, const char* value)
 			while (media->ice.remote_count + 1 < sizeof(media->ice.remotes) / sizeof(media->ice.remotes[0]) && media->offset + sizeof(*media->ice.remotes[0]) <= sizeof(media->ptr))
 			{
 				media->ice.remotes[media->ice.remote_count] = (struct sdp_candidate_t*)(media->ptr + media->offset);
-				if (!value || 3 != sscanf(value, "%hu %63s %hu%n", &media->ice.remotes[media->ice.remote_count]->component, &media->ice.remotes[media->ice.remote_count]->address, &media->ice.remotes[media->ice.remote_count]->port, &n))
+				if (!value || 3 != sscanf(value, "%hu %63s %hu%n", &media->ice.remotes[media->ice.remote_count]->component, media->ice.remotes[media->ice.remote_count]->address, &media->ice.remotes[media->ice.remote_count]->port, &n))
 					break;
 
 				value += n;
 				++media->ice.remote_count;
 				media->offset += sizeof(*media->ice.remotes[0]);
 			}
+		}
+		else if (0 == strcmp("setup", name))
+		{
+			media->setup = sdp_option_setup_from(value);
+		}
+		else if (0 == strcmp("ssrc", name))
+		{
+			media->ssrc.ssrc = atoi(value);
+			// TODO: ssrc attribute
+		}
+		else if (0 == strcmp("ssrc-group", name))
+		{
+			// TODO
 		}
 	}
 }
@@ -324,7 +340,8 @@ int rtsp_media_sdp(const char* s, struct rtsp_media_t* medias, int count)
 	const char* control;
 	const char* start, *stop;
 	const char* iceufrag, *icepwd;
-	const char* network, *addrtype, *address;
+	const char* username, *session, *version;
+	const char* network, *addrtype, *address, *source;
 	struct rtsp_media_t* m;
 	struct rtsp_header_range_t range;
 	sdp_t* sdp;
@@ -347,12 +364,13 @@ int rtsp_media_sdp(const char* s, struct rtsp_media_t* medias, int count)
 	start = stop = NULL;
 	for (i = 0; i < sdp_timing_count(sdp); i++)
 	{
-	//	sdp_timing_get(sdp, i, &start, &stop);
+		sdp_timing_get(sdp, i, &start, &stop);
 	}
 
 	// C.1.7 Connection Information
-	network = addrtype = address = NULL;
-	sdp_connection_get(sdp, &network, &addrtype, &address);
+	network = addrtype = source = NULL;
+	if (0 != sdp_connection_get(sdp, &network, &addrtype, &source) || 0 == strcmp("0.0.0.0", source))
+		sdp_origin_get(sdp, &username, &session, &version, &network, &addrtype, &source);
 
 	// session ice-ufrag/ice-pwd
 	iceufrag = sdp_attribute_find(sdp, "ice-ufrag");
@@ -370,9 +388,16 @@ int rtsp_media_sdp(const char* s, struct rtsp_media_t* medias, int count)
 			m->start = strtoull(start, NULL, 10);
 			m->stop = strtoull(stop, NULL, 10);
 		}
-		snprintf(m->network, sizeof(m->network), "%s", network);
-		snprintf(m->addrtype, sizeof(m->addrtype), "%s", addrtype);
-		snprintf(m->address, sizeof(m->address), "%s", address);
+        
+		if(0 == sdp_media_get_connection(sdp, i, &network, &addrtype, &address))
+        {
+			if (0 == strcmp("IP4", addrtype) && 0 == strcmp("0.0.0.0", address) && source && *source)
+				address = source;
+            snprintf(m->source, sizeof(m->source), "%s", source && *source ? source : "");
+            snprintf(m->network, sizeof(m->network), "%s", network);
+            snprintf(m->address, sizeof(m->address), "%s", address);
+            snprintf(m->addrtype, sizeof(m->addrtype), "%s", addrtype);
+        }
 		//media->cseq = rand();
 		
 		m->nport = sdp_media_port(sdp, i, m->port, sizeof(m->port)/sizeof(m->port[0]));
@@ -394,6 +419,10 @@ int rtsp_media_sdp(const char* s, struct rtsp_media_t* medias, int count)
 		for (j = 0; j < m->avformat_count; j++)
 			m->avformats[j].fmt = formats[j];
 
+		// TODO: plan-B streams
+		m->mode = sdp_media_mode(sdp, i);
+		m->setup = SDP_A_SETUP_NONE;
+
 		// update media encoding
 		sdp_media_attribute_list(sdp, i, NULL, rtsp_media_onattr, m);
 
@@ -407,4 +436,65 @@ int rtsp_media_sdp(const char* s, struct rtsp_media_t* medias, int count)
 	count = sdp_media_count(sdp);
 	sdp_destroy(sdp);
 	return count; // should check return value
+}
+
+/// @return -0-no media, >0-ok, <0-error
+int rtsp_media_to_sdp(const struct rtsp_media_t* m, char* line, int bytes)
+{
+	int i, n;
+	int setup = 0;
+	int port = m->port[0];
+
+	if (SDP_M_PROTO_TEST_TCP(sdp_option_proto_from(m->proto)))
+	{
+		// try to set tcp active for sender side
+		setup = (SDP_A_SETUP_NONE == m->setup || SDP_A_SETUP_ACTPASS == m->setup) ? SDP_A_SETUP_ACTIVE : m->setup;
+		//if (SDP_A_SETUP_PASSIVE == setup || SDP_A_SETUP_ACTPASS == setup)
+		//	port = options->m[i].port[0];
+	}
+
+	n = snprintf(line, bytes, "m=%s %d %s", m->media, port, m->proto);
+	for (i = 0; i < m->avformat_count; i++)
+	{
+		if (m->avformats[i].fmt >= 96 && !m->avformats[i].encoding[0])
+			continue; // ignore empty encoding
+		n += snprintf(line + n, bytes - n, " %d", m->avformats[i].fmt);
+	}
+	n += snprintf(line + n, bytes - n, "\n");
+
+	for (i = 0; i < m->avformat_count; i++)
+	{
+		if (!m->avformats[i].encoding[0])
+			continue;
+
+		if (SDP_M_MEDIA_VIDEO == sdp_option_media_from(m->media))
+			n += snprintf(line + n, bytes - n, "a=rtpmap:%d %s/%d\n", m->avformats[i].fmt, m->avformats[i].encoding, m->avformats[i].rate ? m->avformats[i].rate : 90000);
+		else if (SDP_M_MEDIA_AUDIO == sdp_option_media_from(m->media))
+			n += snprintf(line + n, bytes - n, "a=rtpmap:%d %s/%d/%d\n", m->avformats[i].fmt, m->avformats[i].encoding, m->avformats[i].rate, m->avformats[i].channel);
+	}
+
+	//for (int j = 0; j < 128 && j < 8 * sizeof(m->payloads) / sizeof(m->payloads[0]); j++)
+	//{
+	//	if(m->payloads[j/8] & (1<<(j%8)))
+	//		n += snprintf(answer+n, sizeof(answer)-n, " %d", j);
+	//}
+
+	if (SDP_M_PROTO_TEST_TCP(sdp_option_proto_from(m->proto)))
+	{
+		n += snprintf(line + n, bytes - n, "a=setup:%s\n", sdp_option_setup_to(setup));
+	}
+
+	if (m->nport < 2 || m->port[0] == m->port[1])
+	{
+		n += snprintf(line + n, bytes - n, "a=rtcp-mux\n");
+	}
+
+	n += snprintf(line + n, bytes - n, "a=%s\n", sdp_option_mode_to(m->mode));
+
+	if (m->ssrc.ssrc)
+	{
+		n += snprintf(line + n, bytes - n, "a=ssrc: %u\n", m->ssrc.ssrc);
+	}
+
+	return n;
 }

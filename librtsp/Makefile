@@ -10,21 +10,30 @@ OUTFILE = librtsp.a
 #
 # INCLUDES = $(addprefix -I,$(INCLUDES)) # add -I prefix
 #--------------------------------------------------------------------
+# muhwan: add aio
 INCLUDES = . \
 					./include \
 					$(ROOT)/include \
 					$(ROOT)/libhttp/include \
-					../librtp/include
+					../librtp/include \
+					../libmpeg/include \
+					../libflv/include \
+					../libmov/include \
+					../libmkv/include \
+					../../avcodec/avbsf/include \
+					../../avcodec/avcodec/include \
+					$(ROOT)/libaio/include
 
 #-------------------------------Source-------------------------------
 #
 #--------------------------------------------------------------------
-SOURCE_PATHS = source source/client source/server
+# muhwan: add aio
+SOURCE_PATHS = source source/client source/server source/utils source/sdp source/server/aio
 SOURCE_FILES = $(foreach dir,$(SOURCE_PATHS),$(wildcard $(dir)/*.cpp))
 SOURCE_FILES += $(foreach dir,$(SOURCE_PATHS),$(wildcard $(dir)/*.c))
 
-#SOURCE_FILES += $(ROOT)/source/digest/md5.c
-#SOURCE_FILES += $(ROOT)/source/base64.c
+SOURCE_FILES += $(ROOT)/source/digest/md5.c
+SOURCE_FILES += $(ROOT)/source/base64.c
 
 #-----------------------------Library--------------------------------
 #

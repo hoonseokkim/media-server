@@ -1,5 +1,9 @@
-RELEASE ?= 0 # default debug
-UNICODE ?= 0 # default ansi
+# muhwan
+# RELEASE ?= 0 # default debug
+# UNICODE ?= 0 # default ansi
+RELEASE ?= 1
+UNICODE ?= 0
+
 
 ifdef PLATFORM
 	CROSS:=$(PLATFORM)-
@@ -48,6 +52,13 @@ CFLAGS += -fvisibility=hidden
 
 COMPILE.CC = $(CC) $(addprefix -I,$(INCLUDES)) $(addprefix -D,$(DEFINES)) $(CFLAGS)
 COMPILE.CXX = $(CXX) $(addprefix -I,$(INCLUDES)) $(addprefix -D,$(DEFINES)) $(CXXFLAGS)
+
+#-------------------------Link---------------------------
+#
+#--------------------------------------------------------------------
+ifeq ($(STATIC_LINK),1)
+    LDFLAGS += -static
+endif
 
 #-------------------------Compile Output---------------------------
 #

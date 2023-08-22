@@ -1,3 +1,48 @@
+/*
+								  |Request received
+								  |pass to TU
+								  V
+							+-----------+
+							|           |
+							| Trying    |-------------+
+							|           |             |
+							+-----------+             |200-699 from TU
+								  |                   |send response
+								  |1xx from TU        |
+								  |send response      |
+								  |                   |
+			   Request            V      1xx from TU  |
+			   send response+-----------+send response|
+				   +--------|           |--------+    |
+				   |        | Proceeding|        |    |
+				   +------->|           |<-------+    |
+			+<--------------|           |             |
+			|Trnsprt Err    +-----------+             |
+			|Inform TU            |                   |
+			|                     |                   |
+			|                     |200-699 from TU    |
+			|                     |send response      |
+			|  Request            V                   |
+			|  send response+-----------+             |
+			|      +--------|           |             |
+			|      |        | Completed |<------------+
+			|      +------->|           |
+			+<--------------|           |
+			|Trnsprt Err    +-----------+
+			|Inform TU            |
+			|                     |Timer J fires
+			|                     |-
+			|                     |
+			|                     V
+			|               +-----------+
+			|               |           |
+			+-------------->| Terminated|
+							|           |
+							+-----------+
+
+				Figure 8: non-INVITE server transaction
+*/
+
 #include "sip-uas-transaction.h"
 
 // Figure 8: non-INVITE server transaction (p140)
@@ -26,7 +71,7 @@ int sip_uas_transaction_noninvite_input(struct sip_uas_transaction_t* t, struct 
 		// If a retransmission of the request is received while in 
 		// the "Proceeding" state, the most recently sent provisional 
 		// response MUST be passed to the transport layer for retransmission.
-		r = sip_uas_transaction_dosend(t);
+		r = sip_uas_transaction_dosend(t, t->param);
 		assert(0 == r); // ignore transport error(client will retransmission request)
 		return 0;
 
@@ -36,7 +81,7 @@ int sip_uas_transaction_noninvite_input(struct sip_uas_transaction_t* t, struct 
 		//    whenever a retransmission of the request is received.
 		// 2. Any other final responses passed by the TU to the server
 		//    transaction MUST be discarded while in the "Completed" state
-		r = sip_uas_transaction_dosend(t);
+		r = sip_uas_transaction_dosend(t, t->param);
 		assert(0 == r); // ignore transport error(client will retransmission request)
 		return 0;
 
@@ -51,8 +96,8 @@ int sip_uas_transaction_noninvite_input(struct sip_uas_transaction_t* t, struct 
 
 int sip_uas_transaction_noninvite_reply(struct sip_uas_transaction_t* t, int code, const void* data, int bytes)
 {
-	assert(SIP_UAS_TRANSACTION_TRYING == t->status || SIP_UAS_TRANSACTION_PROCEEDING == t->status);
-	if (SIP_UAS_TRANSACTION_TRYING != t->status && SIP_UAS_TRANSACTION_PROCEEDING != t->status)
+	assert(SIP_UAS_TRANSACTION_TRYING == t->status || SIP_UAS_TRANSACTION_PROCEEDING == t->status || (SIP_UAS_TRANSACTION_INIT == t->status && code >= 400) );
+	if (SIP_UAS_TRANSACTION_TRYING != t->status && SIP_UAS_TRANSACTION_PROCEEDING != t->status && SIP_UAS_TRANSACTION_INIT != t->status)
 		return 0; // discard
 
 	t->reply->u.s.code = code;
@@ -84,6 +129,11 @@ int sip_uas_transaction_noninvite_reply(struct sip_uas_transaction_t* t, int cod
 		// start timer J
 		sip_uas_transaction_timewait(t, t->reliable ? 1 : TIMER_J);
 	}
+	else
+	{
+		// proceding timeout
+		sip_uas_transaction_timeout(t, TIMER_H);
+	}
 
-	return sip_uas_transaction_dosend(t);
+	return sip_uas_transaction_dosend(t, t->param);
 }

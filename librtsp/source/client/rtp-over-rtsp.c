@@ -32,7 +32,9 @@ static int rtp_alloc(struct rtp_over_rtsp_t *rtp)
 // Stream data such as RTP packets is encapsulated by an ASCII dollar sign(24 hexadecimal), 
 // followed by a one-byte channel identifier,
 // followed by the length of the encapsulated binary data as a binary two-byte integer in network byte order.
-const uint8_t* rtp_over_rtsp(struct rtp_over_rtsp_t *rtp, const uint8_t* data, const uint8_t* end)
+// muhwan
+// const uint8_t* rtp_over_rtsp(struct rtp_over_rtsp_t *rtp, const uint8_t* data, const uint8_t* end)
+const uint8_t* rtp_over_rtsp(struct rtp_over_rtsp_t* rtp, const uint8_t* data, const uint8_t* end, rtsp_server_t* rtsp)
 {
 	int n;
 
@@ -67,7 +69,7 @@ const uint8_t* rtp_over_rtsp(struct rtp_over_rtsp_t *rtp, const uint8_t* data, c
 		case rtp_data:
 			if (0 == rtp->bytes && 0 != rtp_alloc(rtp))
 				return end;
-			n = end - data;
+			n = (int)(end - data);
 			n = VMIN(rtp->length - rtp->bytes, n);
 			memcpy(rtp->data + rtp->bytes, data, n);
 			rtp->bytes += (uint16_t)n;
@@ -76,8 +78,11 @@ const uint8_t* rtp_over_rtsp(struct rtp_over_rtsp_t *rtp, const uint8_t* data, c
 			if (rtp->bytes == rtp->length)
 			{
 				rtp->state = rtp_start;
-				if(rtp->onrtp)
+				if (rtp->onrtp) 
 					rtp->onrtp(rtp->param, rtp->channel, rtp->data, rtp->length);
+				else if(rtp->onrtp_svr && rtsp) // muhwan add
+					rtp->onrtp_svr(rtp->param, rtsp, rtp->channel, rtp->data, rtp->length);
+					
 				return data;
 			}
 			break;

@@ -20,7 +20,9 @@
 #define strcasecmp	_stricmp
 #endif
 
-#define USER_AGENT "RTSP client v0.1"
+// muhwan: USER_AGENT ¼öÁ¤ 
+// #define USER_AGENT "RTSP client v0.1"
+#define USER_AGENT "4DLiveClient-1.0.0"
 #define N_MEDIA 8
 
 enum rtsp_state_t
@@ -83,7 +85,6 @@ struct rtsp_client_t
 //int rtsp_client_setup(struct rtsp_client_t* rtsp, const char* sdp);
 //int rtsp_client_teardown(struct rtsp_client_t* rtsp);
 int rtsp_client_sdp(struct rtsp_client_t* rtsp, const char* sdp);
-int rtsp_client_options(struct rtsp_client_t *rtsp, const char* commands);
 int rtsp_client_get_parameter(struct rtsp_client_t *rtsp, int media, const char* parameter);
 int rtsp_client_set_parameter(struct rtsp_client_t *rtsp, int media, const char* parameter);
 

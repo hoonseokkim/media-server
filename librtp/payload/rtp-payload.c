@@ -113,7 +113,7 @@ int rtp_packet_getsize()
 static int rtp_payload_find(int payload, const char* encoding, struct rtp_payload_delegate_t* codec)
 {
 	assert(payload >= 0 && payload <= 127);
-	if (payload >= 96 && encoding)
+	if (payload >= RTP_PAYLOAD_DYNAMIC && encoding)
 	{
 		if (0 == strcasecmp(encoding, "H264"))
 		{
@@ -127,7 +127,7 @@ static int rtp_payload_find(int payload, const char* encoding, struct rtp_payloa
 			codec->encoder = rtp_h265_encode();
 			codec->decoder = rtp_h265_decode();
 		}
-		else if (0 == strcasecmp(encoding, "MP4V-ES"))
+		else if (0 == strcasecmp(encoding, "MP4V-ES") || 0 == strcasecmp(encoding, "MPEG4"))
 		{
 			// RFC6416 RTP Payload Format for MPEG-4 Audio/Visual Streams
 			// 5. RTP Packetization of MPEG-4 Visual Bitstreams (p8)
@@ -170,8 +170,12 @@ static int rtp_payload_find(int payload, const char* encoding, struct rtp_payloa
 			codec->encoder = rtp_av1_encode();
 			codec->decoder = rtp_av1_decode();
 		}
-		else if (0 == strcasecmp(encoding, "MP2P") // MPEG-2 Program Streams video (RFC 2250)
-			|| 0 == strcasecmp(encoding, "MP1S"))  // MPEG-1 Systems Streams video (RFC 2250)
+        else if (0 == strcasecmp(encoding, "MP2P") || 0 == strcasecmp(encoding, "PS")) // MPEG-2 Program Streams video (RFC 2250)
+        {
+            codec->encoder = rtp_ts_encode();
+            codec->decoder = rtp_ps_decode();
+        }
+		else if (0 == strcasecmp(encoding, "MP1S"))  // MPEG-1 Systems Streams video (RFC 2250)
 		{
 			codec->encoder = rtp_ts_encode();
 			codec->decoder = rtp_ts_decode();
@@ -209,7 +213,7 @@ static int rtp_payload_find(int payload, const char* encoding, struct rtp_payloa
 			codec->decoder = rtp_common_decode();
 			break;
 
-		case RTP_PAYLOAD_MPA: // MPEG-1 or MPEG-2 audio only (RFC 3551, RFC 2250)
+		case RTP_PAYLOAD_MP3: // MPEG-1 or MPEG-2 audio only (RFC 3551, RFC 2250)
 		case RTP_PAYLOAD_MPV: // MPEG-1 and MPEG-2 video (RFC 2250)
 			codec->encoder = rtp_mpeg1or2es_encode();
 			codec->decoder = rtp_mpeg1or2es_decode();
