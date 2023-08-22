@@ -1,6 +1,7 @@
 #include "sdp-payload.h"
 #include "rtp-profile.h"
 #include <assert.h>
+#include <errno.h>
 
 int sdp_payload_video(uint8_t* data, int bytes, int rtp, const char* proto, unsigned short port, int payload, int frequence, const void* extra, int extra_size)
 {
@@ -25,6 +26,7 @@ int sdp_payload_video(uint8_t* data, int bytes, int rtp, const char* proto, unsi
         return sdp_vp9(data, bytes, proto, port, payload);
 
     case RTP_PAYLOAD_AV1:
+    case RTP_PAYLOAD_AV1X:
         return sdp_av1(data, bytes, proto, port, payload, frequence, extra, extra_size);
 
     case RTP_PAYLOAD_MP4ES:
@@ -32,7 +34,7 @@ int sdp_payload_video(uint8_t* data, int bytes, int rtp, const char* proto, unsi
 
     default:
         assert(0);
-        return -1;
+        return -EPROTONOSUPPORT;
     }
 }
 
@@ -57,6 +59,6 @@ int sdp_payload_audio(uint8_t* data, int bytes, int rtp, const char* proto, unsi
 
     default:
         assert(0);
-        return -1;
+        return -EPROTONOSUPPORT;
     }
 }

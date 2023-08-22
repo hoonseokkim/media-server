@@ -127,6 +127,13 @@ static int rtp_payload_find(int payload, const char* encoding, struct rtp_payloa
 			codec->encoder = rtp_h265_encode();
 			codec->decoder = rtp_h265_decode();
 		}
+		else if (0 == strcasecmp(encoding, "H266"))
+		{
+			// H.266 video (VVC)
+			// https://www.ietf.org/archive/id/draft-ietf-avtcore-rtp-vvc-18.html#name-media-type-registration
+			codec->encoder = rtp_h266_encode();
+			codec->decoder = rtp_h266_decode();
+		}
 		else if (0 == strcasecmp(encoding, "MP4V-ES") || 0 == strcasecmp(encoding, "MPEG4"))
 		{
 			// RFC6416 RTP Payload Format for MPEG-4 Audio/Visual Streams
@@ -222,6 +229,11 @@ static int rtp_payload_find(int payload, const char* encoding, struct rtp_payloa
 		case RTP_PAYLOAD_MP2T: // MPEG-2 transport stream (RFC 2250)
 			codec->encoder = rtp_ts_encode();
 			codec->decoder = rtp_ts_decode();
+			break;
+
+		case RTP_PAYLOAD_AV1X: // https://bugs.chromium.org/p/webrtc/issues/detail?id=11042
+			codec->encoder = rtp_av1_encode();
+			codec->decoder = rtp_av1_decode();
 			break;
 
 		case RTP_PAYLOAD_JPEG:

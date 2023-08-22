@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#if defined(OS_WINDOWS)
+	#define strncasecmp	_strnicmp
+#endif
+
 struct rtsp_client_t* rtsp_client_create(const char* uri, const char* usr, const char* pwd, const struct rtsp_client_handler_t *handler, void* param)
 {
 	struct rtsp_client_t *rtsp;
@@ -62,10 +66,19 @@ static int rtsp_client_handle(struct rtsp_client_t* rtsp, http_parser_t* parser)
 	case RTSP_OPTIONS:	return rtsp_client_options_onreply(rtsp, parser);
 	case RTSP_GET_PARAMETER: return rtsp_client_get_parameter_onreply(rtsp, parser);
 	case RTSP_SET_PARAMETER: return rtsp_client_set_parameter_onreply(rtsp, parser);
-	// muhwan: RTSP_RECORD Ãß°¡
+	// muhwan: RTSP_RECORD ì¶”ê°€
 	case RTSP_RECORD:	return rtsp_client_record_onreply(rtsp, parser);	
 	default: assert(0); return -1;
 	}
+}
+
+static int rtsp_check_response_line(const char* data, size_t bytes)
+{
+	const char* line = "RTSP/1.0 ";
+	assert(bytes > 0);
+	if (bytes >= 9)
+		bytes = 9;
+	return strncasecmp(line, data, 9);
 }
 
 int rtsp_client_input(struct rtsp_client_t *rtsp, const void* data, size_t bytes)
@@ -80,13 +93,7 @@ int rtsp_client_input(struct rtsp_client_t *rtsp, const void* data, size_t bytes
 
 	do
 	{
-		if (0 == rtsp->parser_need_more_data && (*p == '$' || 0 != rtsp->rtp.state))
-		{
-			// muhwan modify 
-			//p = rtp_over_rtsp(&rtsp->rtp, p, end);
-			p = rtp_over_rtsp(&rtsp->rtp, p, end, NULL);
-		}
-		else
+		if(rtsp->parser_need_more_data || 0 == rtsp_check_response_line((const char*)p, (size_t)(end - p)))
 		{
 			// TODO: server->client Announce (update sdp)
 
@@ -101,6 +108,14 @@ int rtsp_client_input(struct rtsp_client_t *rtsp, const void* data, size_t bytes
 				assert((size_t)remain < bytes);
 			}
 			p = end - remain;
+		}
+		else
+		{
+			//if (0 == rtsp->parser_need_more_data && (*p == '$' || 0 != rtsp->rtp.state))
+
+			// muhwan modify 
+			//p = rtp_over_rtsp(&rtsp->rtp, p, end);
+			p = rtp_over_rtsp(&rtsp->rtp, p, end, NULL);
 		}
 	} while (p < end && r >= 0);
 
@@ -167,4 +182,11 @@ int rtsp_client_get_media_rate(struct rtsp_client_t *rtsp, int media)
 		rate = profile ? profile->frequency : 0;
 	}
 	return rate;
+}
+
+int rtsp_client_get_media_type(struct rtsp_client_t* rtsp, int media)
+{
+	if (media < 0 || media >= rtsp->media_count)
+		return -1;
+	return sdp_option_media_from(rtsp->media[media].media);
 }

@@ -19,13 +19,18 @@ struct rtp_over_rtsp_t
 	uint16_t capacity;
 	uint8_t* data;
 
+//#if defined(RTP_OVER_RTSP_TRY_TO_FIND_NEXT_PACKET)
+	int check; // should check flag
+	uint32_t ssrc[8];
+//#endif
+
 	void (*onrtp)(void* param, uint8_t channel, const void* data, uint16_t bytes);
 	// 2. muhwan: add 
 	void (*onrtp_svr)(void* param, rtsp_server_t *rtsp, uint8_t channel, const void* data, uint16_t bytes);	
 	void* param;
 };
 
-// muhwan: rtp_over_rtsp(rtsp_server_t ÆÄ¶ó¸ŞÅÍ Ãß°¡)
+// muhwan: rtp_over_rtsp(rtsp_server_t íŒŒë¼ë©”í„° ì¶”ê°€)
 // const uint8_t* rtp_over_rtsp(struct rtp_over_rtsp_t *rtp, const uint8_t* data, const uint8_t* end);
 const uint8_t* rtp_over_rtsp(struct rtp_over_rtsp_t* rtp, const uint8_t* data, const uint8_t* end, rtsp_server_t *rtsp);
 

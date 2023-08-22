@@ -95,10 +95,10 @@ int aom_av1_codec_configuration_record_save(const struct aom_av1_t* av1, uint8_t
 static inline const uint8_t* leb128(const uint8_t* data, int bytes, uint64_t* v)
 {
 	int i;
-	int64_t b;
+	uint64_t b;
 
 	b = 0x80;
-	for (*v = i = 0; i < 8 && i < bytes && 0 != (b & 0x80); i++)
+	for (*v = i = 0; i * 7 < 64 && i < bytes && 0 != (b & 0x80); i++)
 	{
 		b = data[i];
 		*v |= (b & 0x7F) << (i * 7);
@@ -171,7 +171,7 @@ int aom_av1_obu_split(const uint8_t* data, size_t bytes, int (*handler)(void* pa
 			ptr = leb128(data + i + offset, (int)(bytes - i - offset), &len);
 			if (ptr + len > data + bytes)
 				return -1;
-			len += ptr - data;
+			len += ptr - data - i;
 		}
 		else
 		{
@@ -513,17 +513,16 @@ static int aom_av1_extra_handler(void* param, const uint8_t* obu, size_t bytes)
 		if (obu[0] & 0x04) // obu_extension_flag
 			av1->data[av1->bytes++] = obu[1];
 
-		if (0 == (obu[0] & 0x02))
+		//if (0 == (obu[0] & 0x02))
 		{
 			// fill obu size, leb128
-			for(i = len; 1; av1->bytes++)
+			for(i = len; i >= 0x80; av1->bytes++)
 			{
 				av1->data[av1->bytes] = (uint8_t)(i & 0x7F);
-				i >>= 7;
-				if (i <= 0)
-					break;
 				av1->data[av1->bytes] |= 0x80;
+				i >>= 7;
 			}
+			av1->data[av1->bytes++] = (uint8_t)(i & 0x7F);
 		}
 		memcpy(av1->data + av1->bytes, ptr, (size_t)len);
 		av1->bytes += (uint16_t)len;

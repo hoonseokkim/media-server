@@ -53,16 +53,21 @@ static struct sip_message_t* reply2sip(const char* reply)
 	return msg;
 }
 
-static void* sip_uac_test_oninvite(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, struct sip_dialog_t* dialog, int code)
+static int sip_uac_test_oninvite(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, struct sip_dialog_t* dialog, int code, void** session)
 {
     struct sip_message_test_t* test = (struct sip_message_test_t*)param;
     test->dialog = dialog;
-	return test;
+	if (200 <= code && code < 300)
+	{
+		*session = test;
+		sip_uac_ack(t, NULL, 0);
+	}
+	return 0;
 }
 
-static void* sip_uac_test_onsubscribe(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, struct sip_subscribe_t* subscribe, int code)
+static int sip_uac_test_onsubscribe(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, struct sip_subscribe_t* subscribe, int code, void** session)
 {
-	return NULL;
+	return 0;
 }
 
 static int sip_uac_test_onreply(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, int code)
@@ -106,7 +111,7 @@ static int sip_uac_transport_via(void* transport, const char* destination, char 
 
 	len = sizeof(ss);
 	memset(&ss, 0, sizeof(ss));
-	strcpy(protocol, "UDP");
+	snprintf(protocol, 16, "%s", "UDP");
 
 	uri = uri_parse(destination, strlen(destination));
 	if (!uri)
@@ -187,7 +192,7 @@ static int sip_test_register(struct sip_message_test_t* alice, struct sip_messag
     sip_message_add_header(alice->st->reply, "To", "Bob <sip:bob@biloxi.com>;tag=2493k59kd"); // modify to.tag
     sip_message_add_header(alice->st->reply, "Contact", "<sip:bob@192.0.2.4>");
     sip_message_add_header(alice->st->reply, "Expires", "7200");
-    assert(0 == sip_uas_reply(alice->st.get(), 200, NULL, 0) && 0 == strcmp(alice->buf, f2));
+    assert(0 == sip_uas_reply(alice->st.get(), 200, NULL, 0, alice) && 0 == strcmp(alice->buf, f2));
 	assert(0 == sip_agent_input(bob->sip, reply, bob));
 	//sip_message_destroy(req); // delete by uac transaction
 	sip_message_destroy(reply);
@@ -279,17 +284,17 @@ static int sip_test_invite(struct sip_message_test_t* alice, struct sip_message_
 	assert(0 == sip_agent_input(bob->sip, req, bob));
     sip_message_add_header(bob->st->reply, "To", "Bob <sip:bob@biloxi.com>;tag=a6c85cf"); // modify to.tag
     sip_message_add_header(bob->st->reply, "Contact", "<sip:bob@192.0.2.4>");
-    assert(0 == sip_uas_reply(bob->st.get(), 100, NULL, 0) && 0 == strcmp(bob->buf, f2));
+    assert(0 == sip_uas_reply(bob->st.get(), 100, NULL, 0, bob) && 0 == strcmp(bob->buf, f2));
     assert(0 == sip_agent_input(alice->sip, reply100, alice));
-    assert(0 == sip_uas_reply(bob->st.get(), 180, NULL, 0) && 0 == strcmp(bob->buf, f8));
+    assert(0 == sip_uas_reply(bob->st.get(), 180, NULL, 0, bob) && 0 == strcmp(bob->buf, f8));
     assert(0 == sip_agent_input(alice->sip, reply180, alice));
-    assert(0 == sip_uas_reply(bob->st.get(), 100, NULL, 0) && 0 == strcmp(bob->buf, f2));
+    assert(0 == sip_uas_reply(bob->st.get(), 100, NULL, 0, bob) && 0 == strcmp(bob->buf, f2));
     assert(0 == sip_agent_input(alice->sip, reply100, alice));
-    assert(0 == sip_uas_reply(bob->st.get(), 180, NULL, 0) && 0 == strcmp(bob->buf, f8));
+    assert(0 == sip_uas_reply(bob->st.get(), 180, NULL, 0, bob) && 0 == strcmp(bob->buf, f8));
     assert(0 == sip_agent_input(alice->sip, reply180, alice));
     //assert(0 == sip_uas_reply(bob->st, 603, NULL, 0));
     //assert(0 == sip_agent_input(alice->sip, reply603));
-    assert(0 == sip_uas_reply(bob->st.get(), 200, NULL, 0) && 0 == strcmp(bob->buf, f11));
+    assert(0 == sip_uas_reply(bob->st.get(), 200, NULL, 0, bob) && 0 == strcmp(bob->buf, f11));
     assert(0 == sip_agent_input(alice->sip, reply200, alice) /*&& 0 == strcmp(alice->buf, f12)*/ ); // The branch parameter is different for  INVITE and ACK message sent By UAC
 	assert(0 == sip_agent_input(alice->sip, reply180, alice));
 	assert(0 == sip_agent_input(alice->sip, reply100, alice));
@@ -360,7 +365,7 @@ static int sip_test_message(struct sip_message_test_t* alice, struct sip_message
 	std::shared_ptr<sip_uac_transaction_t> t(sip_uac_transaction_create1(bob->sip, req), sip_uac_transaction_release);
 	assert(0 == sip_uac_send(t.get(), "Watson, come here.", 18, &bob->udp, bob));
 	assert(0 == sip_agent_input(alice->sip, req, alice));
-    assert(0 == sip_uas_reply(alice->st.get(), 200, NULL, 0));
+    assert(0 == sip_uas_reply(alice->st.get(), 200, NULL, 0, alice));
 	assert(0 == sip_agent_input(bob->sip, reply, bob));
 	//sip_message_destroy(req); // delete by uac transaction
 	sip_message_destroy(reply);
@@ -398,7 +403,7 @@ static int sip_test_dialog_message(struct sip_message_test_t* alice, struct sip_
     std::shared_ptr<sip_uac_transaction_t> t(sip_uac_transaction_create1(bob->sip, req), sip_uac_transaction_release);
     assert(0 == sip_uac_send(t.get(), "Watson, come here.", 18, &bob->udp, bob));
     assert(0 == sip_agent_input(alice->sip, req, alice));
-    assert(0 == sip_uas_reply(alice->st.get(), 200, NULL, 0));
+    assert(0 == sip_uas_reply(alice->st.get(), 200, NULL, 0, alice));
     assert(0 == sip_agent_input(bob->sip, reply, bob));
     //sip_message_destroy(req); // delete by uac transaction
     sip_message_destroy(reply);
@@ -511,7 +516,7 @@ static int sip_test_notify(struct sip_message_test_t* alice, struct sip_message_
     sip_message_add_header(bob->st->reply, "Expires", "240");
     sip_message_add_header(bob->st->reply, "Contact", "<sip:vmaccess*150@mypbx.wildixin.com:5060;user=phone>");
     sip_message_add_header(bob->st->reply, "Server", "Wildix GW-4.2.5.35963");
-    assert(0 == sip_uas_reply(bob->st.get(), 200, NULL, 0));
+    assert(0 == sip_uas_reply(bob->st.get(), 200, NULL, 0, bob));
 	std::string s2(bob->buf); memset(bob->buf, 0, sizeof(bob->buf)); std::copy_if(s2.begin(), s2.end(), bob->buf, [](char c){return c!='\r';});
     assert(0 == strcmp(bob->buf, f2));
     assert(0 == sip_agent_input(alice->sip, reply, alice));
@@ -526,7 +531,7 @@ static int sip_test_notify(struct sip_message_test_t* alice, struct sip_message_
     sip_message_add_header(alice->st->reply, "Event", "message-summary");
     sip_message_add_header(alice->st->reply, "Subscription-State", "active;expires=240");
     sip_message_add_header(alice->st->reply, "User-Agent", "Wildix W-AIR 03.55.00.24 9c7514340722");
-    assert(0 == sip_uas_reply(alice->st.get(), 200, NULL, 0));
+    assert(0 == sip_uas_reply(alice->st.get(), 200, NULL, 0, alice));
     std::string s4(alice->buf); memset(alice->buf, 0, sizeof(alice->buf)); std::copy_if(s4.begin(), s4.end(), alice->buf, [](char c){return c!='\r';});
     assert(0 == strcmp(alice->buf, f4));
 	assert(0 == sip_agent_input(bob->sip, reply2, bob));
@@ -541,7 +546,7 @@ static int sip_test_notify(struct sip_message_test_t* alice, struct sip_message_
     sip_message_add_header(bob->st->reply, "Expires", "0");
     sip_message_add_header(bob->st->reply, "Contact", "<sip:vmaccess*150@mypbx.wildixin.com:5060;user=phone>");
     sip_message_add_header(bob->st->reply, "Server", "Wildix GW-4.2.5.35963");
-    assert(0 == sip_uas_reply(bob->st.get(), 200, NULL, 0));
+    assert(0 == sip_uas_reply(bob->st.get(), 200, NULL, 0, bob));
     std::string s6(bob->buf); memset(bob->buf, 0, sizeof(bob->buf)); std::copy_if(s6.begin(), s6.end(), bob->buf, [](char c){return c!='\r';});
     assert(0 == strcmp(bob->buf, f6));
     assert(0 == sip_agent_input(alice->sip, reply3, alice));
@@ -603,7 +608,7 @@ static int sip_test_bye(struct sip_message_test_t* alice, struct sip_message_tes
     //sip_uac_add_header(t.get(), "Via", "SIP/2.0/UDP pc33.atlanta.com;branch=z9hG4bKnashds9");
     assert(0 == sip_uac_send(t.get(), NULL, 0, &alice->udp, alice));
 	assert(0 == sip_agent_input(bob->sip, req, bob));
-    assert(0 == sip_uas_reply(bob->st.get(), 200, NULL, 0));
+    assert(0 == sip_uas_reply(bob->st.get(), 200, NULL, 0, bob));
 	assert(0 == sip_agent_input(alice->sip, reply, alice));
 	//sip_message_destroy(req); // delete by uac transaction
 	sip_message_destroy(reply);
@@ -611,14 +616,15 @@ static int sip_test_bye(struct sip_message_test_t* alice, struct sip_message_tes
 	return 0;
 }
 
-static void* sip_uas_oninvite(void* param, const struct sip_message_t* req, struct sip_uas_transaction_t* t, struct sip_dialog_t* dialog, const void* data, int bytes)
+static int sip_uas_oninvite(void* param, const struct sip_message_t* req, struct sip_uas_transaction_t* t, struct sip_dialog_t* dialog, const void* data, int bytes, void** session)
 {
     struct sip_message_test_t* test = (struct sip_message_test_t*)param;
     test->dialog = dialog;
     
     sip_uas_transaction_addref(t);
     test->st.reset(t, sip_uas_transaction_release);
-    return test;
+	*session = test;
+    return 0;
 }
 
 static int sip_uas_onack(void* param, const struct sip_message_t* req, struct sip_uas_transaction_t* t, void* session, struct sip_dialog_t* dialog, int code, const void* data, int bytes)
@@ -688,7 +694,7 @@ static int sip_uas_onmessage(void* param, const struct sip_message_t* req, struc
     return 0;
 }
 
-static void* sip_uas_onsubscribe(void* param, const struct sip_message_t* req, struct sip_uas_transaction_t* t, sip_subscribe_t* subscribe)
+static int sip_uas_onsubscribe(void* param, const struct sip_message_t* req, struct sip_uas_transaction_t* t, sip_subscribe_t* subscribe, void** sub)
 {
 	struct sip_message_test_t* test = (struct sip_message_test_t*)param;
     sip_uas_transaction_addref(t);
@@ -698,7 +704,8 @@ static void* sip_uas_onsubscribe(void* param, const struct sip_message_t* req, s
 	//std::shared_ptr<sip_uac_transaction_t> notify(sip_uac_notify(test->sip, subscribe, "active", sip_uac_test_onreply, test), sip_uac_transaction_release);
 	//assert(0 == sip_uac_send(notify.get(), NULL, 0, &test->udp, test));
 	
-	return test;
+	*sub = test;
+	return 0;
 }
 
 static int sip_uas_onnotify(void* param, const struct sip_message_t* req, struct sip_uas_transaction_t* t, void* session, const struct cstring_t* event)

@@ -11,10 +11,13 @@ extern "C" {
 struct sip_transport_t;
 struct sip_uac_transaction_t;
 
-/// @return user-defined session-id(valid only code=2xx)
-typedef void* (*sip_uac_oninvite)(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, struct sip_dialog_t* dialog, int code);
+/// call sip_uac_ack on 2xx only
+/// @param[out] session user-defined session-id(only code=2xx)
 /// @return 0-ok, other-error
-typedef void* (*sip_uac_onsubscribe)(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, struct sip_subscribe_t* subscribe, int code);
+typedef int (*sip_uac_oninvite)(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, struct sip_dialog_t* dialog, int code, void** session);
+/// @param[out] session user-defined session-id(only code=2xx)
+/// @return 0-ok, other-error
+typedef int (*sip_uac_onsubscribe)(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, struct sip_subscribe_t* subscribe, int code, void** session);
 /// @return 0-ok, other-error
 typedef int (*sip_uac_onreply)(void* param, const struct sip_message_t* reply, struct sip_uac_transaction_t* t, int code);
 /// @return <0-error, 0-udp, 1-tcp, other-reserved
@@ -24,7 +27,7 @@ typedef int (*sip_uac_onreply)(void* param, const struct sip_message_t* reply, s
 /// @param[in] registrar register server, such as sip:registrar.biloxi.com. can be null.
 /// @param[in] seconds expires seconds
 struct sip_uac_transaction_t* sip_uac_register(struct sip_agent_t* sip, const char* name, const char* registrar, int seconds, sip_uac_onreply onregister, void* param);
-struct sip_uac_transaction_t* sip_uac_options(struct sip_agent_t* sip, const char* from, const char* to, sip_uac_onreply onoptins, void* param);
+struct sip_uac_transaction_t* sip_uac_options(struct sip_agent_t* sip, const char* from, const char* to, sip_uac_onreply onoptions, void* param);
 
 struct sip_uac_transaction_t* sip_uac_invite(struct sip_agent_t* sip, const char* name, const char* to, sip_uac_oninvite oninvite, void* param);
 struct sip_uac_transaction_t* sip_uac_cancel(struct sip_agent_t* sip, struct sip_uac_transaction_t* invite, sip_uac_onreply oncancel, void* param);
@@ -62,8 +65,14 @@ int sip_uac_add_header_int(struct sip_uac_transaction_t* t, const char* name, in
 /// @return 0-ok, other-error
 int sip_uac_send(struct sip_uac_transaction_t* t, const void* data, int bytes, struct sip_transport_t* transport, void* param);
 
-//int sip_uac_ack(struct sip_dialog_t* dialog, const void* data, int bytes, struct sip_transport_t* transport, void* param);
+/// sip_uac_ack for sip_uac_oninvite 2xx only
+/// @param[in] invite uac transaction, create by sip_uac_invite
+/// @param[in] data message payload(such as SDP), maybe NULL if don't need send anything
+/// @param[in] bytes data length in byte, >=0 only
+/// @return 0-ok, other-error
+int sip_uac_ack(struct sip_uac_transaction_t* invite, const void* data, int bytes);
 
+int sip_uac_transaction_addref(struct sip_uac_transaction_t* t);
 int sip_uac_transaction_release(struct sip_uac_transaction_t* t);
 
 #if defined(__cplusplus)

@@ -8,6 +8,7 @@
 #include "rtsp-header-session.h"
 #include "rtsp-header-transport.h"
 #include "http-parser.h"
+#include "sdp-options.h"
 #include "sdp.h"
 #include <errno.h>
 #include <stdio.h>
@@ -20,7 +21,7 @@
 #define strcasecmp	_stricmp
 #endif
 
-// muhwan: USER_AGENT ¼öÁ¤ 
+// muhwan: USER_AGENT ìˆ˜ì •
 // #define USER_AGENT "RTSP client v0.1"
 #define USER_AGENT "4DLiveClient-1.0.0"
 #define N_MEDIA 8

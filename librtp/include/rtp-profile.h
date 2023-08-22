@@ -92,14 +92,16 @@ enum
 	RTP_PAYLOAD_G723		= 4,  // ITU-T G.723.1 8000/1, 30ms (rfc3551)
 	RTP_PAYLOAD_PCMA		= 8,  // ITU-T G.711 PCM A-Law audio 64 kbit/s (rfc3551)
 	RTP_PAYLOAD_G722		= 9,  // ITU-T G.722 audio 64 kbit/s (rfc3551)
-	RTP_PAYLOAD_G729		= 18, // ITU-T G.729 and G.729a audio 8 kbit/s (rfc3551)
+	RTP_PAYLOAD_CN			= 13, // Real-time Transport Protocol (RTP) Payload for Comfort Noise (CN) (rfc3389)
 	RTP_PAYLOAD_MP3			= 14, // MPEG-1/MPEG-2 audio (rfc2250)
+	RTP_PAYLOAD_G729		= 18, // ITU-T G.729 and G.729a audio 8 kbit/s (rfc3551)
 	RTP_PAYLOAD_SVACA		= 20, // GB28181-2016
 
 	RTP_PAYLOAD_JPEG		= 26, // JPEG video (rfc2435)
 	RTP_PAYLOAD_MPV			= 32, // MPEG-1 and MPEG-2 video (rfc2250)
 	RTP_PAYLOAD_MP2T		= 33, // MPEG-2 transport stream (rfc2250)
 	RTP_PAYLOAD_H263		= 34, // H.263 video, first version (1996) (rfc2190)
+    RTP_PAYLOAD_AV1X        = 35, // https://bugs.chromium.org/p/webrtc/issues/detail?id=11042
 
 	RTP_PAYLOAD_MP2P		= 96, // MPEG-2 Program Streams video (rfc2250)
 	RTP_PAYLOAD_MP4V		= 97, // MP4V-ES MPEG-4 Visual (rfc6416)
@@ -113,6 +115,13 @@ enum
 	RTP_PAYLOAD_VP8			= 105, // RTP Payload Format for VP8 Video (rfc7741)
 	RTP_PAYLOAD_VP9			= 106, // RTP Payload Format for VP9 Video draft-ietf-payload-vp9-03
 	RTP_PAYLOAD_AV1			= 107, // https://aomediacodec.github.io/av1-rtp-spec/
+	RTP_PAYLOAD_H266		= 108, // https://www.ietf.org/archive/id/draft-ietf-avtcore-rtp-vvc-18.html
+
+	RTP_PAYLOAD_RTX			= 110, // RTP Retransmission Payload Format (rfc4588)
+	RTP_PAYLOAD_RED			= 111, // RTP Payload for Redundant Audio Data (rfc2198)
+	RTP_PAYLOAD_FEC_ULP		= 112, // RTP Payload Format for Generic Forward Error Correction (rfc5109)
+	RTP_PAYLOAD_FEC_FLEX	= 113, // RTP Payload Format for Flexible Forward Error Correction (rfc8267)
+	RTP_PAYLOAD_FEC_RS		= 114, // RTP Payload Format for Reed-Solomon(non-standard/private)
 };
 
 ///@param[in] payload RTP payload type(0 ~ 127)

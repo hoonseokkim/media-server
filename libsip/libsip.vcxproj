@@ -51,7 +51,6 @@
     <ClCompile Include="src\uac\sip-uac-info.c" />
     <ClCompile Include="src\uac\sip-uac-invite.c" />
     <ClCompile Include="src\uac\sip-uac-options.c" />
-    <ClCompile Include="src\uac\sip-uac-refer.c" />
     <ClCompile Include="src\uac\sip-uac-register.c" />
     <ClCompile Include="src\uac\sip-uac-subscribe.c" />
     <ClCompile Include="src\uac\sip-uac-transaction-invite.c" />
@@ -132,8 +131,8 @@
       </PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;OS_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;include;../../sdk/include;../../sdk/libhttp/include</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>OS_WINDOWS;WIN32;_DEBUG;_LIB;OS_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;include;src;../../sdk/include;../../sdk/libhttp/include</AdditionalIncludeDirectories>
       <EnablePREfast>true</EnablePREfast>
     </ClCompile>
     <Link>
@@ -146,8 +145,8 @@
       </PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;include;../../sdk/include;../../sdk/libhttp/include</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>OS_WINDOWS;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;include;src;../../sdk/include;../../sdk/libhttp/include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -161,8 +160,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;OS_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;include;../../sdk/include;../../sdk/libhttp/include</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>OS_WINDOWS;WIN32;NDEBUG;_LIB;OS_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;include;src;../../sdk/include;../../sdk/libhttp/include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -178,8 +177,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;include;../../sdk/include;../../sdk/libhttp/include</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>OS_WINDOWS;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;include;src;../../sdk/include;../../sdk/libhttp/include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

@@ -8,6 +8,9 @@
 #if defined(_WIN32) || defined(_WIN64)
 #define fseek64 _fseeki64
 #define ftell64 _ftelli64
+#elif defined(__ANDROID__)
+#define fseek64 fseek
+#define ftell64 ftell
 #elif defined(OS_LINUX)
 #define fseek64 fseeko64
 #define ftell64 ftello64
@@ -33,7 +36,7 @@ static int mov_file_seek(void* fp, int64_t offset)
 	return fseek64((FILE*)fp, offset, offset >= 0 ? SEEK_SET : SEEK_END);
 }
 
-static uint64_t mov_file_tell(void* fp)
+static int64_t mov_file_tell(void* fp)
 {
 	return ftell64((FILE*)fp);
 }
@@ -59,7 +62,7 @@ static int mov_file_cache_read(void* fp, void* data, uint64_t bytes)
 			else
 			{
 				file->off = 0;
-				file->len = fread(file->ptr, 1, sizeof(file->ptr), file->fp);
+				file->len = (unsigned int)fread(file->ptr, 1, sizeof(file->ptr), file->fp);
 				if (file->len < 1)
 					return 0 != ferror(file->fp) ? ferror(file->fp) : -1 /*EOF*/;
 			}
@@ -68,7 +71,7 @@ static int mov_file_cache_read(void* fp, void* data, uint64_t bytes)
 		if (file->off < file->len)
 		{
 			unsigned int n = file->len - file->off;
-			n = n > bytes ? bytes : n;
+			n = n > bytes ? (unsigned int)bytes : n;
 			memcpy(p, file->ptr + file->off, n);
 			file->tell += n;
 			file->off += n;
@@ -89,7 +92,7 @@ static int mov_file_cache_write(void* fp, const void* data, uint64_t bytes)
 	if (file->off + bytes < sizeof(file->ptr))
 	{
 		memcpy(file->ptr + file->off, data, bytes);
-		file->off += bytes;
+		file->off += (unsigned int)bytes;
 		return 0;
 	}
 
@@ -126,11 +129,12 @@ static int mov_file_cache_seek(void* fp, int64_t offset)
 	return 0;
 }
 
-static uint64_t mov_file_cache_tell(void* fp)
+static int64_t mov_file_cache_tell(void* fp)
 {
 	struct mov_file_cache_t* file = (struct mov_file_cache_t*)fp;
-	assert(ftell64(file->fp) == file->tell + (int)(file->len - file->off));
-	return file->tell;
+	if (ftell64(file->fp) != (int64_t)(file->tell + (uint64_t)(int)(file->len - file->off)))
+		return -1;
+	return (int64_t)file->tell;
 	//return ftell64(file->fp);
 }
 

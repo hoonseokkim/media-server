@@ -9,7 +9,7 @@
 #include <assert.h>
 #include <errno.h>
 
-// muhwan modify 65->20 (±âÁ¸)
+// muhwan modify 65->20 (ê¸°ì¡´)
 //#define TIMEOUT_RECV 65000
 #define TIMEOUT_RECV 20000
 #define TIMEOUT_SEND 10000
@@ -149,7 +149,7 @@ int rtsp_transport_tcp_create(socket_t socket, const struct sockaddr* addr, sock
 	rtsphandler.send = rtsp_session_send;
 
 	session = (struct rtsp_session_t*)calloc(1, sizeof(*session));
-	if (!session) return -1;
+	if (!session) return -ENOMEM;
 
 	session->socket = socket;
 	socket_addr_to(addr, addrlen, ip, &port);
@@ -164,12 +164,12 @@ int rtsp_transport_tcp_create(socket_t socket, const struct sockaddr* addr, sock
 	if (!session->rtsp || !session->aio)
 	{
 		rtsp_session_ondestroy(session);
-		return -1;
+		return -ENOMEM;
 	}
 	
 	session->rtp.param = param;
 	
-	// muhwan: call-back ÇÔ¼ö º¯°æ
+	// muhwan: call-back í•¨ìˆ˜ ë³€ê²½
 	// session->rtp.onrtp = handler->onrtp;
 	session->rtp.onrtp = NULL;
 	session->rtp.onrtp_svr = handler->onrtp;
@@ -178,7 +178,7 @@ int rtsp_transport_tcp_create(socket_t socket, const struct sockaddr* addr, sock
 	if (0 != aio_transport_recv(session->aio, session->buffer, sizeof(session->buffer)))
 	{
 		rtsp_session_ondestroy(session);
-		return -1;
+		return -ENOTCONN;
 	}
 
 	return 0;

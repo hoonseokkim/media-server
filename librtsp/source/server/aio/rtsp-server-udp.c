@@ -133,7 +133,7 @@ static void rtsp_transport_udp_recv(struct rtsp_udp_transport_t* t)
 static void rtsp_transport_udp_onrecv(void* param, int code, size_t bytes, const struct sockaddr* addr, socklen_t addrlen)
 {
 	char ip[65];
-	unsigned short port = 0;
+	unsigned short port;
 	struct rtsp_udp_session_t* session;
 	struct rtsp_udp_transport_t* transport;
 	session = (struct rtsp_udp_session_t*)param;

@@ -3,6 +3,7 @@
 #include "sdp-options.h"
 #include "sdp-a-fmtp.h"
 #include "sdp-a-rtpmap.h"
+#include "sys/path.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -45,40 +46,6 @@ static inline int scopy(struct rtsp_media_t* medias, char** dst, const char* src
 //	return (control && *control) ? 1 : 0;
 //}
 
-static int isAbsoluteURL(char const* url)
-{
-	// Assumption: "url" is absolute if it contains a ':', before any
-	// occurrence of '/'
-	while (*url != '\0' && *url != '/') {
-		if (*url == ':') return 1;
-		++url;
-	}
-
-	return 0;
-}
-
-static const char* uri_join(char* uri, size_t bytes, const char* base, const char* path)
-{
-	size_t n, n2, offset;
-
-	assert(uri && base && path);
-	n = strlen(base ? base : "");
-	n2 = strlen(path ? path : "");
-	if (n < 1 || n2 < 1 || n + n2 + 2 > bytes || !uri)
-		return NULL;
-
-	offset = snprintf(uri, bytes, "%s", base);
-
-	if ('/' == path[0] || '\\' == path[0])
-		path += 1;
-	if ('/' == uri[offset - 1] || '\\' == uri[offset - 1])
-		offset -= 1;
-
-	// TODO: check uri parameters '?'
-	offset += snprintf(uri + offset, bytes - offset, "/%s", path);
-	return uri;
-}
-
 // rfc 2326 C.1.1 Control URL (p81)
 // look for a base URL in the following order:
 // 1. The RTSP Content-Base field
@@ -86,64 +53,38 @@ static const char* uri_join(char* uri, size_t bytes, const char* base, const cha
 // 3. The RTSP request URL
 int rtsp_media_set_url(struct rtsp_media_t* m, const char* base, const char* location, const char* request)
 {
-	char path[256] = { 0 };
-	char session[256] = { 0 };
+	int r;
+	char buffer[256] = { 0 };
 
 	// C.1.1 Control URL (p81)
 	// If this attribute contains only an asterisk (*), then the URL is
 	// treated as if it were an empty embedded URL, and thus inherits the entire base URL.
-	if (*m->session_uri && '*' != *m->session_uri)
-		snprintf(session, sizeof(session), "%s", m->session_uri);
-
-	if (!isAbsoluteURL(session) && base && *base)
+	if (m->session_uri[0] && '*' != m->session_uri[0])
 	{
-		if (*session)
-		{
-			uri_join(path, sizeof(path), base, session);
-			base = path;
-		}
-		snprintf(session, sizeof(session), "%s", base);
+		snprintf(buffer, sizeof(buffer)-1, "%s", m->session_uri);
+		r = path_resolve2(m->session_uri, sizeof(m->session_uri)-1, buffer, base, location, request);
+	}
+	else if('*' == m->session_uri[0])
+	{
+		r = snprintf(m->session_uri, sizeof(m->session_uri) - 1, "%s", request);
+	}
+	else
+	{
+		// keep session uri empty
+		r = 0;
 	}
 
-	if (!isAbsoluteURL(session) && location && *location)
+	if ('*' != m->uri[0])
 	{
-		if (*session)
-		{
-			uri_join(path, sizeof(path), location, session);
-			location = path;
-		}
-		snprintf(session, sizeof(session), "%s", location);
+		snprintf(buffer, sizeof(buffer) - 1, "%s", m->uri);
+		r = path_resolve2(m->uri, sizeof(m->uri) - 1, buffer, base, location, request);
+	}
+	else
+	{
+		r = snprintf(m->uri, sizeof(m->uri) - 1, "%s", request);
 	}
 
-	if (!isAbsoluteURL(session) && request && *request)
-	{
-		if (*session)
-		{
-			uri_join(path, sizeof(path), request, session);
-			request = path;
-		}
-		snprintf(session, sizeof(session), "%s", request);
-	}
-
-	// update session url
-	if (*m->session_uri && *session)
-		snprintf(m->session_uri, sizeof(m->session_uri), "%s", session);
-
-	// update media url
-	if (!isAbsoluteURL(m->uri) && *session)
-	{
-		if (*m->uri)
-		{
-			uri_join(path, sizeof(path), session, m->uri);
-			snprintf(m->uri, sizeof(m->uri), "%s", path);
-		}
-		else
-		{
-			snprintf(m->uri, sizeof(m->uri), "%s", session);
-		}
-	}
-
-	return 0;
+	return r >= 0 ? 0 : r;
 }
 
 // RFC 6184 RTP Payload Format for H.264 Video
@@ -166,15 +107,18 @@ static void rtsp_media_onattr(void* param, const char* name, const char* value)
 		if (0 == strcmp("rtpmap", name))
 		{
 			int rate = 0;
-			char encoding[sizeof(media->avformats[i].encoding)];
+			char channel[64];
+			char encoding[16 + sizeof(media->avformats[i].encoding)];
 			if (strlen(value) < sizeof(encoding)) // make sure encoding have enough memory space
 			{
-				sdp_a_rtpmap(value, &payload, encoding, &rate, NULL);
+				channel[0] = '\0';
+				sdp_a_rtpmap(value, &payload, encoding, &rate, channel);
 				for (i = 0; i < media->avformat_count; i++)
 				{
 					if (media->avformats[i].fmt == payload)
 					{
 						media->avformats[i].rate = rate;
+						media->avformats[i].channel = *channel ? atoi(channel) : 1; // default 1-channel
 						snprintf(media->avformats[i].encoding, sizeof(media->avformats[i].encoding), "%s", encoding);
 						break;
 					}
@@ -308,7 +252,7 @@ static void rtsp_media_onattr(void* param, const char* name, const char* value)
 		}
 		else if (0 == strcmp("ssrc", name))
 		{
-			media->ssrc.ssrc = atoi(value);
+			media->ssrc.ssrc = (uint32_t)strtoul(value, NULL, 10);
 			// TODO: ssrc attribute
 		}
 		else if (0 == strcmp("ssrc-group", name))
@@ -333,7 +277,7 @@ m=video 2232 RTP/AVP 31
 m=whiteboard 32416 UDP WB
 a=orient:portrait
 */
-int rtsp_media_sdp(const char* s, struct rtsp_media_t* medias, int count)
+int rtsp_media_sdp(const char* s, int len, struct rtsp_media_t* medias, int count)
 {
 	int i, j, n;
 	int formats[16];
@@ -346,7 +290,7 @@ int rtsp_media_sdp(const char* s, struct rtsp_media_t* medias, int count)
 	struct rtsp_header_range_t range;
 	sdp_t* sdp;
 
-	sdp = sdp_parse(s);
+	sdp = sdp_parse(s, len);
 	if (!sdp)
 		return -1;
 
@@ -454,23 +398,35 @@ int rtsp_media_to_sdp(const struct rtsp_media_t* m, char* line, int bytes)
 	}
 
 	n = snprintf(line, bytes, "m=%s %d %s", m->media, port, m->proto);
-	for (i = 0; i < m->avformat_count; i++)
+	for (i = 0; i < m->avformat_count && n < bytes; i++)
 	{
 		if (m->avformats[i].fmt >= 96 && !m->avformats[i].encoding[0])
 			continue; // ignore empty encoding
 		n += snprintf(line + n, bytes - n, " %d", m->avformats[i].fmt);
 	}
-	n += snprintf(line + n, bytes - n, "\n");
+	n += snprintf(line + n, bytes > n ? bytes - n : 0, "\n");
 
-	for (i = 0; i < m->avformat_count; i++)
+	for (i = 0; i < m->avformat_count && n >= 0 && n < bytes; i++)
 	{
 		if (!m->avformats[i].encoding[0])
 			continue;
 
 		if (SDP_M_MEDIA_VIDEO == sdp_option_media_from(m->media))
+		{
 			n += snprintf(line + n, bytes - n, "a=rtpmap:%d %s/%d\n", m->avformats[i].fmt, m->avformats[i].encoding, m->avformats[i].rate ? m->avformats[i].rate : 90000);
+			if(n >= 0 && n < bytes && m->avformats[i].fmtp && m->avformats[i].fmtp[0])
+				n += snprintf(line + n, bytes - n, "a=fmtp:%s\n", m->avformats[i].fmtp);
+		}
 		else if (SDP_M_MEDIA_AUDIO == sdp_option_media_from(m->media))
-			n += snprintf(line + n, bytes - n, "a=rtpmap:%d %s/%d/%d\n", m->avformats[i].fmt, m->avformats[i].encoding, m->avformats[i].rate, m->avformats[i].channel);
+		{
+			if(m->avformats[i].channel > 0)
+				n += snprintf(line + n, bytes - n, "a=rtpmap:%d %s/%d/%d\n", m->avformats[i].fmt, m->avformats[i].encoding, m->avformats[i].rate, m->avformats[i].channel);
+			else
+				n += snprintf(line + n, bytes - n, "a=rtpmap:%d %s/%d\n", m->avformats[i].fmt, m->avformats[i].encoding, m->avformats[i].rate);
+
+			if (n >= 0 && n < bytes && m->avformats[i].fmtp && m->avformats[i].fmtp[0])
+				n += snprintf(line + n, bytes - n, "a=fmtp:%s\n", m->avformats[i].fmtp);
+		}
 	}
 
 	//for (int j = 0; j < 128 && j < 8 * sizeof(m->payloads) / sizeof(m->payloads[0]); j++)
@@ -493,8 +449,8 @@ int rtsp_media_to_sdp(const struct rtsp_media_t* m, char* line, int bytes)
 
 	if (m->ssrc.ssrc)
 	{
-		n += snprintf(line + n, bytes - n, "a=ssrc: %u\n", m->ssrc.ssrc);
+		n += snprintf(line + n, bytes - n, "a=ssrc:%u\n", m->ssrc.ssrc);
 	}
 
-	return n;
+	return n > 0 && n < bytes ? n : -1;
 }

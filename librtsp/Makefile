@@ -10,25 +10,23 @@ OUTFILE = librtsp.a
 #
 # INCLUDES = $(addprefix -I,$(INCLUDES)) # add -I prefix
 #--------------------------------------------------------------------
-# muhwan: add aio
 INCLUDES = . \
 					./include \
 					$(ROOT)/include \
+					$(ROOT)/libaio/include \
 					$(ROOT)/libhttp/include \
-					../librtp/include \
-					../libmpeg/include \
 					../libflv/include \
-					../libmov/include \
 					../libmkv/include \
+					../libmov/include \
+					../libmpeg/include \
+					../librtp/include \
 					../../avcodec/avbsf/include \
-					../../avcodec/avcodec/include \
-					$(ROOT)/libaio/include
+					../../avcodec/avcodec/include
 
 #-------------------------------Source-------------------------------
 #
 #--------------------------------------------------------------------
-# muhwan: add aio
-SOURCE_PATHS = source source/client source/server source/utils source/sdp source/server/aio
+SOURCE_PATHS = source source/client source/server source/server/aio source/utils source/sdp
 SOURCE_FILES = $(foreach dir,$(SOURCE_PATHS),$(wildcard $(dir)/*.cpp))
 SOURCE_FILES += $(foreach dir,$(SOURCE_PATHS),$(wildcard $(dir)/*.c))
 
@@ -49,12 +47,12 @@ endif
 
 LIBS = 
 
-STATIC_LIBS =
+STATIC_LIBS = 
 
 #-----------------------------DEFINES--------------------------------
 #
 # DEFINES := $(addprefix -D,$(DEFINES)) # add -L prefix
 #--------------------------------------------------------------------
-DEFINES =
+DEFINES = RTP_OVER_RTSP_TRY_TO_FIND_NEXT_PACKET
 
 include ../gcc.mk

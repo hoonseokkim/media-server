@@ -15,6 +15,15 @@
     <Filter Include="Source Files\server">
       <UniqueIdentifier>{5e4f0a51-fa58-49c9-be18-b5361fd74c1c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\sdp">
+      <UniqueIdentifier>{73ef6a92-2d60-4cfa-8a9a-0ff4f462e6bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\server\aio">
+      <UniqueIdentifier>{70d36b3a-a950-4382-bed1-a88c28e29a28}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\utils">
+      <UniqueIdentifier>{8c2cd184-a3fb-4456-9567-a0a7e5b7c012}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\rtsp-header-range.c">
@@ -122,6 +131,60 @@
     <ClCompile Include="source\sdp-options.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="source\sdp-a-webrtc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-aac.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-av1.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-fmtp-load.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-g7xx.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-h264.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-h265.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-mpeg2.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-mpeg4.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-opus.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-payload.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\sdp\sdp-vpx.c">
+      <Filter>Source Files\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="source\server\aio\rtsp-server-listen.c">
+      <Filter>Source Files\server\aio</Filter>
+    </ClCompile>
+    <ClCompile Include="source\server\aio\rtsp-server-tcp.c">
+      <Filter>Source Files\server\aio</Filter>
+    </ClCompile>
+    <ClCompile Include="source\server\aio\rtsp-server-udp.c">
+      <Filter>Source Files\server\aio</Filter>
+    </ClCompile>
+    <ClCompile Include="source\utils\rtp-sender.c">
+      <Filter>Source Files\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="source\utils\rtsp-demuxer.c">
+      <Filter>Source Files\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="source\utils\rtsp-muxer.c">
+      <Filter>Source Files\utils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\rtsp-header-range.h">
@@ -182,6 +245,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\sdp-options.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\sdp-a-webrtc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

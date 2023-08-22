@@ -1,8 +1,8 @@
 #include "sip-uac-transaction.h"
 #include "sip-transport.h"
+#include "sip-internal.h"
 #include "uri-parse.h"
-
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
+#include "cpm/param.h"
 
 int sip_uac_link_transaction(struct sip_agent_t* sip, struct sip_uac_transaction_t* t);
 int sip_uac_unlink_transaction(struct sip_agent_t* sip, struct sip_uac_transaction_t* t);
@@ -27,13 +27,14 @@ struct sip_uac_transaction_t* sip_uac_transaction_create(struct sip_agent_t* sip
 	// For unreliable transports, requests are retransmitted at an interval which starts at T1 and doubles until it hits T2.
 	t->t2 = sip_message_isinvite(req) ? (64 * T1) : T2;
 
+	atomic_increment32(&s_gc.uac);
 	return t;
 }
 
 int sip_uac_transaction_release(struct sip_uac_transaction_t* t)
 {
-	assert(t->ref > 0);
-	if (0 != atomic_decrement32(&t->ref))
+	assert(!t || t->ref > 0);
+	if (!t || 0 != atomic_decrement32(&t->ref))
 		return 0;
 
 	assert(0 == t->ref);
@@ -47,9 +48,16 @@ int sip_uac_transaction_release(struct sip_uac_transaction_t* t)
 		t->ondestroy(t->ondestroyparam);
 	}   
 
+	if (t->dialog)
+	{
+		sip_dialog_release(t->dialog);
+	}
+	
+	assert(NULL == t->onhandle);
 	sip_message_destroy(t->req);
 	locker_destroy(&t->locker);
 	free(t);
+	atomic_decrement32(&s_gc.uac);
 	return 0;
 }
 
@@ -76,7 +84,7 @@ static int sip_uac_transaction_dosend(struct sip_uac_transaction_t* t)
 
 static void sip_uac_transaction_onretransmission(void* usrptr)
 {
-	int r;
+	int r, timeout;
 	struct sip_uac_transaction_t* t;
 	t = (struct sip_uac_transaction_t*)usrptr;
 
@@ -97,7 +105,8 @@ static void sip_uac_transaction_onretransmission(void* usrptr)
 			//	r = t->onreply(t->param, t, 503/*Service Unavailable*/);
 		}
 
-		t->timera = sip_uac_start_timer(t->agent, t, MIN(t->t2, T1 * (1 << t->retries++)), sip_uac_transaction_onretransmission);
+		timeout = T1 * (1 << t->retries++);
+		t->timera = sip_uac_start_timer(t->agent, t, MIN(t->t2, MAX(T1, timeout)), sip_uac_transaction_onretransmission);
 	}
 	locker_unlock(&t->locker);
 
@@ -118,7 +127,6 @@ static int sip_uac_transaction_terminate(struct sip_uac_transaction_t* t)
 
 static void sip_uac_transaction_ontimeout(void* usrptr)
 {
-	int r;
 	struct sip_uac_transaction_t* t;
 	t = (struct sip_uac_transaction_t*)usrptr;
 	
@@ -134,13 +142,20 @@ static void sip_uac_transaction_ontimeout(void* usrptr)
 
 		// 8.1.3.1 Transaction Layer Errors (p42)
 		if (t->oninvite)
-			t->oninvite(t->param, NULL, t, NULL, 408/*Request Timeout*/);
+			t->oninvite(t->param, NULL, t, NULL, 408/*Request Timeout*/, NULL);
 		else if (t->onsubscribe)
-			t->onsubscribe(t->param, NULL, t, NULL, 408/*Request Timeout*/);
+			t->onsubscribe(t->param, NULL, t, NULL, 408/*Request Timeout*/, NULL);
 		else
-			r = t->onreply(t->param, NULL, t, 408/*Request Timeout*/);
+			t->onreply(t->param, NULL, t, 408/*Request Timeout*/);
 
 		// ignore return value, nothing to do
+
+		// post-handle
+		if (t->onhandle)
+		{
+			t->onhandle(t, 408);
+			t->onhandle = NULL;
+		}
 	}
 	locker_unlock(&t->locker);
 	sip_uac_transaction_release(t);

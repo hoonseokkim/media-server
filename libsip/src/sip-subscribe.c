@@ -23,6 +23,7 @@ struct sip_subscribe_t* sip_subscribe_create(const struct cstring_t* event)
 		LIST_INIT_HEAD(&s->link);
 		s->state = SUBSCRIBE_INIT;
 		cstrcpy(event, s->event, sizeof(s->event) - 1);
+		atomic_increment32(&s_gc.subscribe);
 	}
 	return s;
 }
@@ -39,6 +40,7 @@ int sip_subscribe_release(struct sip_subscribe_t* subscribe)
 	if (subscribe->dialog)
 		sip_dialog_release(subscribe->dialog);
 	free(subscribe);
+	atomic_decrement32(&s_gc.subscribe);
 	return 0;
 }
 
@@ -101,6 +103,13 @@ int sip_subscribe_remove(struct sip_agent_t* sip, struct sip_subscribe_t* subscr
 {
 	// unlink dialog
 	locker_lock(&sip->locker);
+	if (subscribe->link.next == NULL)
+	{
+		// fix remove twice
+		locker_unlock(&sip->locker);
+		return 0;
+	}
+
 	//assert(1 == subscribe->ref);
 	if (subscribe->newdiaolog)
 	{
@@ -149,6 +158,7 @@ struct sip_subscribe_t* sip_subscribe_internal_fetch(struct sip_agent_t* sip, co
 			sip_subscribe_release(subscribe);
 			return NULL; // exist
 		}
+		subscribe->dialog->state = DIALOG_CONFIRMED; // confirm dialog
 
 		// link to tail (add ref later)
 		list_insert_after(&subscribe->link, sip->subscribes.prev);
